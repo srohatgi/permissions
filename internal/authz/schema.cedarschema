@@ -1,51 +1,33 @@
-namespace Access;
+namespace Access {
+
+    // User can have a tenant scope and have a set of Grants
+    entity User {
+        tenantId?: String,
+        expandedPermissions: Set<String>
+    };
+
+    // Machine can have a tenant scope and have a set of Grants
+    entity Machine {
+        tenantId?: String,
+        expandedPermissions: Set<String>
+    };
+
+    // Apps may optionally be tenant-scoped
+    entity App {
+        appUrn: String, // e.g., "urn:bd:applications/Console"
+        tenantId?: String
+    };
 
 
-// Principals carry slugs and generic constraints: { kind, values }
-entity type User {
-    attributes {
-        tenantId: String?,
-        permSlugs: Set<String>,
-        permConstraints: Set<record { kind: String, values: Set<String> }>,
-        // Flattened convenience: "{kind}#{value}" pairs for fast ANY checks
-        permConstraintPairs: Set<String>?
-    }
+    // ApiEndpoints may optionally declare tenantId and or a grant
+    entity ApiEndpoint {
+        requiredPermission: String,
+        tenantId?: String
+    };
+
+
+    // Actions over both principal types
+    action "app:use" appliesTo { principal: [User], resource: App };
+
+    action "api:invoke" appliesTo { principal: [User, Machine], resource: ApiEndpoint };
 }
-
-
-entity type Machine {
-    attributes {
-        tenantId: String?,
-        permSlugs: Set<String>,
-        permConstraints: Set<record { kind: String, values: Set<String> }>,
-        // Flattened convenience: "{kind}#{value}" pairs for fast ANY checks
-        permConstraintPairs: Set<String>?
-    }
-}
-
-
-// Resources may optionally be tenant-scoped
-entity type App {
-    attributes {
-        slug: String, // e.g., "urn:bd:applications/Console"
-        tenantId: String?
-    }
-}
-
-
-// Endpoints can either declare slug requirements, or pass slug and constraint requirements in context
-entity type ApiEndpoint {
-    attributes {
-        // Slug gating (ANY)
-        requiresAnySlugs: Set<String>?,
-        // Constraint gating (ANY): flattened pairs "{kind}#{value}"
-        requiresAnyConstraintPairs: Set<String>?,
-
-        tenantId: String?
-    }
-}
-
-
-// Actions over both principal types
-action "app:use" appliesTo { principal: [User], resource: App }
-action "api:invoke" appliesTo { principal: [User, Machine], resource: ApiEndpoint }

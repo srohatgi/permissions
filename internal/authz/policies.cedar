@@ -1,36 +1,25 @@
-// ============ APP ACCESS (Multi-Tenant) ============
-permit(principal, action == Action::"app:use", resource)
-when { principal.permSlugs.contains(resource.slug) };
+// ===================== PERMITS =====================
 
-
-// ============ APP ACCESS (Tenant-Scoped) ============
-forbid(principal, action == Action::"app:use", resource)
-when { (resource has tenantId) && ( !(principal has tenantId) || principal.tenantId != resource.tenantId ) };
-
-
-// ============ API INVOKE (resource-declared in connected.yaml) ============
-permit(principal, action == Action::"api:invoke", resource)
+// App access: principal must have a permission matching the app's URN
+permit(principal, action == Access::Action::"app:use", resource)
 when {
-    (   !(resource has requiresAnySlugs)
-        || principal.permSlugs.containsAny(resource.requiresAnySlugs) )
+    principal.expandedPermissions.contains(resource.appUrn)
 };
 
 
-// ============ API INVOKE (context-driven requirements from SDK) ============
-permit(principal, action == Action::"api:invoke", resource)
+// API access: principal must have a permission matching the API endpoint's requiredPermission
+permit(principal, action == Access::Action::"api:invoke", resource)
 when {
-    (   !(context has requiresAnySlugs)
-        || principal.permSlugs.containsAny(context.requiresAnySlugs) )
-    &&
-    (   !(context has requiresAnyConstraintPairs)
-        || principal.permConstraintPairs.containsAny(context.requiresAnyConstraintPairs) )
+    principal.expandedPermissions.contains(resource.requiredPermission) 
 };
 
 
-// ============ API INVOKE (Tenant-Scoped) ============
-forbid(principal, action == Action::"api:invoke", resource)
+// ===================== FORBIDS =====================
+
+
+// Deny when principal and resource tenants mismatch (if resource is tenant-scoped)
+forbid(principal, action, resource)
 when {
-    (resource has tenantId && ( !(principal has tenantId) || principal.tenantId != resource.tenantId ))
-    ||
-    ((context has tenantId) && ( !(principal has tenantId) || principal.tenantId != context.tenantId ))
+    (resource has tenantId)
+    && ( !(principal has tenantId) || (principal has tenantId && principal.tenantId != resource.tenantId) )
 };
