@@ -60,12 +60,28 @@ when {
 // Deny when principal and resource tenants mismatch (if resource is tenant-scoped)
 forbid(principal, action, resource)
 when {
-  (resource has tenantId)
-  && (
-       !(principal has tenantId)
-       || (
-        principal has tenantId
-        && principal.tenantId != resource.tenantId
-       )
+     resource has tenantId
+     && 
+     (
+          !(principal has tenantId)
+          || 
+          (
+               principal has tenantId
+               && principal.tenantId != resource.tenantId
+          )
+     )
+};
+
+// Deny when resource is missing required constraints that principal has
+forbid(principal, action, resource is Access::ApiEndpoint)
+when {
+     (
+          principal.constraints has Location_Facility
+          && !(resource.constraints has Location_Facility)
+     )
+     || 
+     (
+          principal.constraints has Dispensing_ItemSecurityCategory
+          && !(resource.constraints has Dispensing_ItemSecurityCategory)
      )
 };
