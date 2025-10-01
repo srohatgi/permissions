@@ -3,13 +3,15 @@ namespace Access {
     // User can have a tenant scope and have a set of Grants
     entity User {
         tenantId?: String,
-        expandedPermissions: Set<String>
+        permission: String,
+        constraints: Constraints
     };
 
     // Machine can have a tenant scope and have a set of Grants
     entity Machine {
         tenantId?: String,
-        expandedPermissions: Set<String>
+        permission: String,
+        constraints: Constraints
     };
 
     // Apps may optionally be tenant-scoped
@@ -22,9 +24,14 @@ namespace Access {
     // ApiEndpoints may optionally declare tenantId and or a grant
     entity ApiEndpoint {
         requiredPermission: String,
+        constraints: Constraints,
         tenantId?: String
     };
 
+    type Constraints = {
+        Location_Facility?: Set<String>,
+        Dispensing_ItemSecurityCategory?: Set<String>
+    };
 
     // Actions over both principal types
     action "app:use" appliesTo { principal: [User], resource: App };

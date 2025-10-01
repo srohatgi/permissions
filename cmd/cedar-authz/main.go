@@ -1,26 +1,26 @@
 package main
 
 import (
-    _ "embed"
-    "encoding/json"
-    "fmt"
-    "log"
+	_ "embed"
+	"encoding/json"
+	"fmt"
+	"log"
 
-    cedar "github.com/cedar-policy/cedar-go"
-    "github.com/srohatgi/permissions/internal/authz"
-    "github.com/srohatgi/permissions/internal/authz/validate"
+	cedar "github.com/cedar-policy/cedar-go"
+	"github.com/srohatgi/permissions/internal/authz"
+	"github.com/srohatgi/permissions/internal/authz/validate"
 )
 
 // Policies are embedded in the internal/authz package for portability.
 
 func main() {
-    // Validate embedded policy against embedded schema before running examples
-    if err := validate.ValidatePolicies([]byte(authz.SchemaSrc), []byte(authz.PolicySrc)); err != nil {
-        log.Fatalf("policy validation failed: %v", err)
-    }
+	// Validate embedded policy against embedded schema before running examples
+	if err := validate.ValidatePolicies([]byte(authz.SchemaSrc), []byte(authz.PolicySrc)); err != nil {
+		log.Fatalf("policy validation failed: %v", err)
+	}
 
-    // Parse policies list and add all to a PolicySet
-    ps := cedar.NewPolicySet()
+	// Parse policies list and add all to a PolicySet
+	ps := cedar.NewPolicySet()
 	if pl, err := cedar.NewPolicyListFromBytes("policies.cedar", []byte(authz.PolicySrc)); err == nil {
 		for i, pol := range pl {
 			ps.Add(cedar.PolicyID(fmt.Sprintf("p%03d", i)), pol)
@@ -38,7 +38,10 @@ func main() {
 	// Build entities for the requested scenarios (simplified schema)
 	entities := buildEntitiesV2()
 	if e, ok := entities.Get(cedar.NewEntityUID("Access::User", "user:alice")); ok {
-		log.Printf("principal attrs: %s", e.Attributes.MarshalCedar())
+		log.Printf("principal attrs (api): %s", e.Attributes.MarshalCedar())
+	}
+	if e, ok := entities.Get(cedar.NewEntityUID("Access::User", "user:alice-app")); ok {
+		log.Printf("principal attrs (app): %s", e.Attributes.MarshalCedar())
 	}
 	if e, ok := entities.Get(cedar.NewEntityUID("Access::App", "app:console")); ok {
 		log.Printf("resource attrs: %s", e.Attributes.MarshalCedar())
@@ -46,7 +49,7 @@ func main() {
 
 	// Scenario A: app:use by Alice (permit)
 	reqAppAlice := cedar.Request{
-		Principal: cedar.NewEntityUID("Access::User", "user:alice"),
+		Principal: cedar.NewEntityUID("Access::User", "user:alice-app"),
 		Action:    cedar.NewEntityUID("Access::Action", "app:use"),
 		Resource:  cedar.NewEntityUID("Access::App", "app:console"),
 	}
@@ -100,8 +103,8 @@ func main() {
 }
 
 // buildEntitiesV2 constructs sample entities for the simplified schema:
-// principals have `expandedPermissions` (Set<String>), apps use `appUrn`,
-// and API endpoints use `requiredPermission`.
+// principals expose `permission` and `constraints`, apps use `appUrn`,
+// and API endpoints use `requiredPermission` with optional constraints.
 func buildEntitiesV2() cedar.EntityMap {
 	type uid struct{ Type, ID string }
 	type entity struct {
@@ -111,34 +114,62 @@ func buildEntitiesV2() cedar.EntityMap {
 	}
 	ents := []entity{
 		{
+			UID: uid{Type: "Access::User", ID: "user:alice-app"},
+			Attrs: map[string]any{
+				"tenantId":   "T1",
+				"permission": "urn:bd:applications/Console",
+				"constraints": map[string]any{
+					"Location_Facility":               []any{"facility:T1"},
+					"Dispensing_ItemSecurityCategory": []any{"S3"},
+				},
+			},
+			Parents: []map[string]string{},
+		},
+		{
 			UID: uid{Type: "Access::User", ID: "user:alice"},
 			Attrs: map[string]any{
-				"tenantId":            "T1",
-				"expandedPermissions": []any{"urn:bd:applications/Console", "remove:dispensing:item"},
+				"tenantId":   "T1",
+				"permission": "remove|dispensing|item",
+				"constraints": map[string]any{
+					"Location_Facility":               []any{"facility:T1"},
+					"Dispensing_ItemSecurityCategory": []any{"S3"},
+				},
 			},
 			Parents: []map[string]string{},
 		},
 		{
 			UID: uid{Type: "Access::User", ID: "user:bob"},
 			Attrs: map[string]any{
-				"tenantId":            "T1",
-				"expandedPermissions": []any{"remove|inventory|item"},
+				"tenantId":   "T1",
+				"permission": "remove|dispensing|item",
+				"constraints": map[string]any{
+					"Location_Facility":               []any{"facility:T1"},
+					"Dispensing_ItemSecurityCategory": []any{"S1"},
+				},
 			},
 			Parents: []map[string]string{},
 		},
 		{
 			UID: uid{Type: "Access::Machine", ID: "machine:trent"},
 			Attrs: map[string]any{
-				"tenantId":            "T1",
-				"expandedPermissions": []any{"remove:dispensing:item"},
+				"tenantId":   "T1",
+				"permission": "remove|dispensing|item",
+				"constraints": map[string]any{
+					"Location_Facility":               []any{"facility:T1"},
+					"Dispensing_ItemSecurityCategory": []any{"S3"},
+				},
 			},
 			Parents: []map[string]string{},
 		},
 		{
 			UID: uid{Type: "Access::Machine", ID: "machine:mallory"},
 			Attrs: map[string]any{
-				"tenantId":            "T1",
-				"expandedPermissions": []any{"remove|dispensing|batch"},
+				"tenantId":   "T1",
+				"permission": "remove|dispensing|item",
+				"constraints": map[string]any{
+					"Location_Facility":               []any{"facility:T1"},
+					"Dispensing_ItemSecurityCategory": []any{"S1"},
+				},
 			},
 			Parents: []map[string]string{},
 		},
@@ -151,7 +182,11 @@ func buildEntitiesV2() cedar.EntityMap {
 			UID: uid{Type: "Access::ApiEndpoint", ID: "ep:/dispense/remove"},
 			Attrs: map[string]any{
 				"tenantId":           "T1",
-				"requiredPermission": "remove:dispensing:item",
+				"requiredPermission": "remove|dispensing|item",
+				"constraints": map[string]any{
+					"Location_Facility":               []any{"facility:T1"},
+					"Dispensing_ItemSecurityCategory": []any{"S3"},
+				},
 			},
 			Parents: []map[string]string{},
 		},
